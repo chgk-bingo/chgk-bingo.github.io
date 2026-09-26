@@ -771,26 +771,6 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   font-variant-numeric:tabular-nums;
 }
 .sheet-stats:empty{display:none;}
-.sheet-code{
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-  font-size:11px;
-  color:var(--muted);
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-radius:8px;
-  padding:8px 10px;
-  word-break:break-all;
-  max-height:90px;
-  overflow-y:auto;
-  user-select:all;
-  -webkit-user-select:all;
-}
-.sheet-restore{
-  display:flex;
-  gap:8px;
-}
-.sheet-restore .toc-filter{flex:1;min-width:0;}
-.sheet-restore .navbtn{flex:none;padding:9px 14px;}
 .sheet-note{
   font-size:13px;
   min-height:1em;
@@ -903,14 +883,8 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
         <h2>Прогресс</h2>
         <button class="icon" id="sheetClose" aria-label="Закрыть">✕</button>
       </div>
-      <p class="sheet-text">Прогресс хранится в этом браузере. Чтобы перенести его на другое устройство или подстраховаться, скопируйте код — и вставьте его там.</p>
+      <p class="sheet-text">Позиция и метки хранятся в браузере на этом устройстве — у каждого человека прогресс свой.</p>
       <div class="sheet-stats" id="sheetStats"></div>
-      <button class="navbtn primary sheet-copy" id="copyCode">Скопировать код прогресса</button>
-      <div class="sheet-code" id="codeOut" hidden></div>
-      <div class="sheet-restore">
-        <input class="toc-filter" id="codeIn" type="text" placeholder="Вставьте код сюда…" autocomplete="off">
-        <button class="navbtn" id="restoreBtn">Восстановить</button>
-      </div>
       <div class="sheet-note" id="sheetNote"></div>
       <div class="sheet-danger">
         <button class="sheet-reset" id="resetBtn">Сбросить весь прогресс…</button>
@@ -1841,53 +1815,9 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     if(e.key === 'Enter'){ e.preventDefault(); askClaude(); }
   });
 
-  // ── progress transfer (copy / restore code) ──
+  // ── progress sheet (stats / reset) ──
   var sheetBack = $('sheetBack'), sheetNote = $('sheetNote');
 
-  function encRanges(arr){
-    if(!arr.length) return '';
-    arr.sort(function(a,b){ return a-b; });
-    var out = [], s = arr[0], p = arr[0];
-    for(var i = 1; i <= arr.length; i++){
-      var v = arr[i];
-      if(v !== p + 1){
-        out.push(s === p ? s.toString(36) : s.toString(36) + '-' + p.toString(36));
-        s = v;
-      }
-      p = v;
-    }
-    return out.join(',');
-  }
-  function decRanges(str, into, val, max){
-    if(!str) return true;
-    var parts = str.split(',');
-    for(var i = 0; i < parts.length; i++){
-      var m = parts[i].split('-');
-      var a = parseInt(m[0], 36), b = m.length > 1 ? parseInt(m[1], 36) : a;
-      if(isNaN(a) || isNaN(b) || a < 0 || b < a || b >= max) return false;
-      for(var j = a; j <= b; j++) into[j] = val;
-    }
-    return true;
-  }
-  function encodeState(){
-    var ks = [], rs = [];
-    for(var key in marks){
-      var n = parseInt(key, 10);
-      if(marks[key] === 'k') ks.push(n);
-      else if(marks[key] === 'r') rs.push(n);
-    }
-    return 'CHGK1.' + idx.toString(36) + '.' + encRanges(ks) + '.' + encRanges(rs);
-  }
-  function decodeState(code){
-    var p = code.replace(/\s+/g, '').split('.');
-    if(p.length !== 4 || p[0] !== 'CHGK1') return null;
-    var pos = parseInt(p[1], 36);
-    if(isNaN(pos) || pos < 0 || pos >= N) return null;
-    var m = {};
-    if(!decRanges(p[2], m, 'k', N)) return null;
-    if(!decRanges(p[3], m, 'r', N)) return null;
-    return {pos: pos, marks: m};
-  }
   function openSheet(){
     if(!cards) return;
     var c = markCounts();
@@ -1896,8 +1826,6 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
       ' · выучено ' + c.k + (c.k ? ' (' + pk + '%)' : '') + ' · на повторение ' + c.r;
     sheetNote.textContent = '';
     sheetNote.className = 'sheet-note';
-    $('codeOut').hidden = true;
-    $('codeIn').value = '';
     $('resetConfirm').hidden = true;
     $('resetBtn').hidden = false;
     sheetBack.hidden = false;
@@ -1907,24 +1835,6 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   $('sheetClose').addEventListener('click', closeSheet);
   sheetBack.addEventListener('click', function(e){
     if(e.target === sheetBack) closeSheet();
-  });
-  $('copyCode').addEventListener('click', function(){
-    var code = encodeState();
-    var show = function(msg, ok){
-      sheetNote.textContent = msg;
-      sheetNote.className = 'sheet-note ' + (ok ? 'good' : 'bad');
-    };
-    var fallback = function(){
-      var out = $('codeOut');
-      out.textContent = code;
-      out.hidden = false;
-      show('Скопируйте код вручную (нажмите на него и выберите всё).', false);
-    };
-    if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(code).then(function(){
-        show('Код скопирован. Сохраните его в заметках или вставьте на другом устройстве.', true);
-      }, fallback);
-    } else fallback();
   });
   $('resetBtn').addEventListener('click', function(){
     $('resetBtn').hidden = true;
@@ -1949,22 +1859,6 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     $('sheetStats').textContent = '';
     sheetNote.textContent = 'Прогресс сброшен — начинаете с чистого листа.';
     sheetNote.className = 'sheet-note good';
-  });
-
-  $('restoreBtn').addEventListener('click', function(){
-    var st = decodeState($('codeIn').value);
-    if(!st){
-      sheetNote.textContent = 'Не получилось прочитать код — проверьте, что он скопирован целиком.';
-      sheetNote.className = 'sheet-note bad';
-      return;
-    }
-    marks = st.marks;
-    saveMarks();
-    goAbs(st.pos);
-    var c = markCounts();
-    sheetNote.textContent = 'Готово: карточка ' + (idx + 1) + ', выучено ' + c.k + ', на повторение ' + c.r + '.';
-    sheetNote.className = 'sheet-note good';
-    $('sheetStats').textContent = '';
   });
 
   // ── load data ──
