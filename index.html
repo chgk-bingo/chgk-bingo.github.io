@@ -411,12 +411,83 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
 .toc-rail button:hover{color:var(--accent);}
 .toc-rail[hidden]{display:none;}
 
+/* ── mode / pile bar ── */
+.modebar{
+  flex:none;
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding-bottom:8px;
+  flex-wrap:wrap;
+}
+.seg{
+  display:flex;
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+}
+.seg button{
+  border:0;
+  background:var(--surface);
+  color:var(--muted);
+  font-size:13px;
+  padding:8px 13px;
+  cursor:pointer;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.seg button.pk{color:var(--know);}
+.seg button.pr{color:var(--repeat);}
+.seg button.on{background:var(--accent);color:#fdf9f4;}
+.seg button.pk.on{background:var(--know);color:#fdf9f4;}
+.seg button.pr.on{background:var(--repeat);color:#fdf9f4;}
+.seg button:disabled{opacity:.4;cursor:default;}
+
 /* ── card ── */
 .stage{
   flex:1;
   min-height:0;
   perspective:1600px;
   padding-block:4px 10px;
+  position:relative;
+}
+.swipe-badge{
+  position:absolute;
+  top:26px;
+  z-index:5;
+  pointer-events:none;
+  opacity:0;
+  font-family:Verdana,sans-serif;
+  font-size:15px;
+  font-weight:bold;
+  padding:8px 14px;
+  border-radius:10px;
+  background:var(--card-paper);
+  box-shadow:0 2px 10px rgba(0,0,0,.2);
+}
+.swipe-badge.sb-k{
+  right:26px;
+  color:var(--know);
+  border:2px solid var(--know);
+  transform:rotate(8deg);
+}
+.swipe-badge.sb-r{
+  left:26px;
+  color:var(--repeat);
+  border:2px solid var(--repeat);
+  transform:rotate(-8deg);
+}
+.deck-empty{
+  position:absolute;
+  inset:16px 0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  color:var(--muted);
+  font-size:15px;
+  line-height:1.5;
+  padding:0 24px;
 }
 .card{
   position:relative;
@@ -425,6 +496,24 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   transform-style:preserve-3d;
   transition:transform .45s cubic-bezier(.4,.1,.2,1);
   cursor:pointer;
+  touch-action:pan-y;
+}
+.card.dragging{transition:none;}
+.card.flying{transition:transform .25s ease-out, opacity .22s ease-out;}
+.quiz-label{
+  font-family:Verdana,sans-serif;
+  font-size:12px;
+  font-weight:bold;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#9b351e;
+  margin-bottom:14px;
+}
+.quiz-q{
+  font-size:20px;
+  line-height:1.5;
+  text-align:left;
+  text-wrap:balance;
 }
 .card.flipped{transform:rotateY(180deg);}
 @media (prefers-reduced-motion: reduce){
@@ -718,11 +807,23 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     <div id="loadmsg">Загружаю карточки…</div>
   </div>
 
+  <div class="modebar" id="modebar" hidden>
+    <div class="seg" role="group" aria-label="Режим">
+      <button id="modeLearn" class="on">Учить</button><button id="modeTest">Тест</button>
+    </div>
+    <div class="seg" role="group" aria-label="Стопка">
+      <button id="pileAll" class="on">Все</button><button id="pileR" class="pr">↻ <span id="pileRn">0</span></button><button id="pileK" class="pk">✓ <span id="pileKn">0</span></button>
+    </div>
+  </div>
+
   <div class="stage" id="stage" hidden>
+    <div class="swipe-badge sb-r" id="badgeR">↻ Повторить</div>
+    <div class="swipe-badge sb-k" id="badgeK">✓ Выучил</div>
+    <div class="deck-empty" id="deckEmpty" hidden></div>
     <div class="card" id="card" tabindex="0" role="button" aria-label="Карточка — нажмите, чтобы перевернуть">
       <div class="face front">
         <div class="face-scroll" id="frontContent"></div>
-        <div class="flip-hint">нажмите, чтобы увидеть факты</div>
+        <div class="flip-hint" id="hintFront">нажмите, чтобы увидеть факты</div>
       </div>
       <div class="face back">
         <div class="face-scroll">
@@ -782,9 +883,13 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
 (function(){
   var cards = null;
   var N = 0;
-  var idx = 0;
-  var titles = null; // plain-text titles for search
-  var LS_KEY = 'chgk-realia-pos';
+  var quiz = null;        // masked test questions (0 = card excluded from test)
+  var mode = 'learn';     // 'learn' | 'test'
+  var pile = 'all';       // 'all' | 'k' | 'r'
+  var deck = [];          // current sequence of absolute card indices
+  var pos = 0;            // position within deck
+  var idx = 0;            // absolute index of the current card (= deck[pos])
+  var titles = null;
 
   var $ = function(id){ return document.getElementById(id); };
   var card = $('card'), frontEl = $('frontContent'), backEl = $('backContent');
@@ -806,7 +911,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     return {k:k, r:r};
   }
   function updateMarkUI(){
-    var m = marks[idx];
+    var m = deck.length ? marks[idx] : null;
     $('knowBtn').classList.toggle('on', m === 'k');
     $('repeatBtn').classList.toggle('on', m === 'r');
     var c = markCounts();
@@ -817,23 +922,36 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
       var sr = document.createElement('span'); sr.className = 'r'; sr.textContent = '↻ ' + c.r;
       st.appendChild(sk); st.appendChild(sr);
     }
+    var kn = $('pileKn'), rn = $('pileRn');
+    if(kn) kn.textContent = c.k;
+    if(rn) rn.textContent = c.r;
+  }
+  // re-place the current position after marks changed the deck
+  function settleAfterMark(advance){
+    var cur = idx;
+    rebuildDeck();
+    var ip = deck.indexOf(cur);
+    if(ip >= 0){
+      pos = Math.min(ip + (advance ? 1 : 0), Math.max(deck.length - 1, 0));
+    } else {
+      pos = Math.min(pos, Math.max(deck.length - 1, 0)); // card left the pile; pos now points at the next one
+    }
+    render();
   }
   function setMark(v){
-    if(marks[idx] === v){
-      delete marks[idx];
-      saveMarks();
-      updateMarkUI();
-    } else {
-      marks[idx] = v;
-      saveMarks();
-      updateMarkUI();
-      if(idx < N - 1) setTimeout(function(){ go(idx + 1); }, 260);
-    }
+    if(!deck.length) return;
+    var clearing = (marks[idx] === v);
+    if(clearing) delete marks[idx];
+    else marks[idx] = v;
+    saveMarks();
+    updateMarkUI();
+    setTimeout(function(){ settleAfterMark(!clearing); }, 260);
   }
 
-  function loadPos(){
+  function posKey(m){ return m === 'test' ? 'chgk-realia-pos-test' : 'chgk-realia-pos'; }
+  function loadPos(m){
     try{
-      var v = localStorage.getItem(LS_KEY);
+      var v = localStorage.getItem(posKey(m));
       if(v !== null){
         var n = parseInt(v, 10);
         if(!isNaN(n) && n >= 0) return n;
@@ -842,7 +960,16 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     return 0;
   }
   function savePos(){
-    try{ localStorage.setItem(LS_KEY, String(idx)); }catch(e){}
+    if(pile !== 'all') return; // piles are review sessions, remember main position only
+    try{ localStorage.setItem(posKey(mode), String(idx)); }catch(e){}
+  }
+  function rebuildDeck(){
+    deck = [];
+    for(var i = 0; i < N; i++){
+      if(pile !== 'all' && marks[i] !== pile) continue;
+      if(mode === 'test' && (!quiz || !quiz[i])) continue;
+      deck.push(i);
+    }
   }
 
   function stripTags(html){
@@ -852,28 +979,77 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   }
 
   function render(){
+    var D = deck.length;
+    var empty = (D === 0);
+    card.hidden = empty;
+    $('deckEmpty').hidden = !empty;
+    $('prevBtn').disabled = empty || pos === 0;
+    $('nextBtn').disabled = empty || pos >= D - 1;
+    $('flipBtn').disabled = empty;
+    $('knowBtn').disabled = empty;
+    $('repeatBtn').disabled = empty;
+    slider.disabled = empty;
+    if(empty){
+      $('deckEmpty').textContent = pile === 'k'
+        ? 'Стопка «Выучил» пока пуста. Отмечайте карточки свайпом вправо или кнопкой ✓.'
+        : (pile === 'r'
+          ? 'Стопка «Повторить» пуста. Отмечайте карточки свайпом влево или кнопкой ↻ — они соберутся здесь.'
+          : 'Здесь пока пусто.');
+      counter.innerHTML = '<b>0</b> / 0';
+      pct.textContent = '';
+      slider.max = 1; slider.value = 1;
+      slider.style.setProperty('--fill', '0%');
+      updateMarkUI();
+      return;
+    }
+    pos = Math.max(0, Math.min(D - 1, pos));
+    idx = deck[pos];
     var c = cards[idx];
     var flen = c[0], back = c[1];
-    frontEl.innerHTML = back.slice(0, flen);
+    if(mode === 'test'){
+      frontEl.innerHTML = '';
+      var lab = document.createElement('div');
+      lab.className = 'quiz-label';
+      lab.textContent = 'Что это за реалия?';
+      var q = document.createElement('div');
+      q.className = 'quiz-q';
+      q.textContent = quiz[idx];
+      frontEl.appendChild(lab);
+      frontEl.appendChild(q);
+      $('hintFront').textContent = 'нажмите, чтобы узнать ответ';
+    } else {
+      frontEl.innerHTML = back.slice(0, flen);
+      $('hintFront').textContent = 'нажмите, чтобы увидеть факты';
+    }
     backEl.innerHTML = back;
     frontEl.scrollTop = 0;
     backEl.parentElement.scrollTop = 0;
     card.classList.remove('flipped');
-    slider.value = idx + 1;
-    var fill = N > 1 ? (idx / (N - 1) * 100) : 100;
+    slider.max = D;
+    slider.value = pos + 1;
+    var fill = D > 1 ? (pos / (D - 1) * 100) : 100;
     slider.style.setProperty('--fill', fill + '%');
-    counter.innerHTML = '<b>' + (idx + 1) + '</b> / ' + N;
-    pct.textContent = Math.round((idx + 1) / N * 100) + '%';
-    $('prevBtn').disabled = (idx === 0);
-    $('nextBtn').disabled = (idx === N - 1);
+    counter.innerHTML = '<b>' + (pos + 1) + '</b> / ' + D;
+    pct.textContent = Math.round((pos + 1) / D * 100) + '%';
     resetAsk();
     updateMarkUI();
     savePos();
   }
 
-  function go(n){
+  function go(p){
+    if(!cards || !deck.length) return;
+    pos = Math.max(0, Math.min(deck.length - 1, p));
+    render();
+  }
+  // jump to an absolute card index, relaxing filters if needed
+  function goAbs(a){
     if(!cards) return;
-    idx = Math.max(0, Math.min(N - 1, n));
+    if(mode === 'test' && (!quiz || !quiz[a])) setMode('learn', true);
+    var ip;
+    rebuildDeck();
+    ip = deck.indexOf(a);
+    if(ip < 0){ setPile('all', true); rebuildDeck(); ip = deck.indexOf(a); }
+    pos = Math.max(0, ip);
     render();
   }
   function flip(){
@@ -882,6 +1058,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
 
   // ── interactions ──
   card.addEventListener('click', function(e){
+    if(suppressClick) return; // a swipe just happened
     if(e.target.closest('a')) return; // let links through, don't flip
     if(e.target.closest('.ask')) return; // Claude box doesn't flip the card
     flip();
@@ -890,15 +1067,49 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     if(e.key === 'Enter'){ e.preventDefault(); flip(); }
   });
   $('flipBtn').addEventListener('click', flip);
-  $('prevBtn').addEventListener('click', function(){ go(idx - 1); });
-  $('nextBtn').addEventListener('click', function(){ go(idx + 1); });
+  $('prevBtn').addEventListener('click', function(){ go(pos - 1); });
+  $('nextBtn').addEventListener('click', function(){ go(pos + 1); });
   $('knowBtn').addEventListener('click', function(){ setMark('k'); });
   $('repeatBtn').addEventListener('click', function(){ setMark('r'); });
 
   slider.addEventListener('input', function(){
-    idx = Math.max(0, Math.min(N - 1, parseInt(slider.value, 10) - 1));
+    if(!deck.length) return;
+    pos = Math.max(0, Math.min(deck.length - 1, parseInt(slider.value, 10) - 1));
     render();
   });
+
+  // ── mode & pile switching ──
+  function setMode(m, silent){
+    if(mode === m) return;
+    mode = m;
+    $('modeLearn').classList.toggle('on', m === 'learn');
+    $('modeTest').classList.toggle('on', m === 'test');
+    if(silent) return; // caller will rebuild and render
+    var cur = idx;
+    rebuildDeck();
+    var ip = deck.indexOf(cur);
+    if(ip < 0) ip = deck.indexOf(loadPos(m));
+    pos = Math.max(0, ip);
+    render();
+  }
+  function setPile(p, silent){
+    if(pile === p) return;
+    pile = p;
+    $('pileAll').classList.toggle('on', p === 'all');
+    $('pileR').classList.toggle('on', p === 'r');
+    $('pileK').classList.toggle('on', p === 'k');
+    if(silent) return;
+    var cur = idx;
+    rebuildDeck();
+    var ip = deck.indexOf(cur);
+    pos = ip >= 0 ? ip : 0;
+    render();
+  }
+  $('modeLearn').addEventListener('click', function(){ setMode('learn'); });
+  $('modeTest').addEventListener('click', function(){ setMode('test'); });
+  $('pileAll').addEventListener('click', function(){ setPile('all'); });
+  $('pileR').addEventListener('click', function(){ setPile('r'); });
+  $('pileK').addEventListener('click', function(){ setPile('k'); });
 
   document.addEventListener('keydown', function(e){
     if(!cards) return;
@@ -912,25 +1123,93 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     }
     var t = e.target;
     if(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-    if(e.key === 'ArrowRight'){ e.preventDefault(); go(idx + 1); }
-    else if(e.key === 'ArrowLeft'){ e.preventDefault(); go(idx - 1); }
+    if(e.key === 'ArrowRight'){ e.preventDefault(); go(pos + 1); }
+    else if(e.key === 'ArrowLeft'){ e.preventDefault(); go(pos - 1); }
     else if(e.key === ' '){ e.preventDefault(); flip(); }
   });
 
-  // swipe
-  var tx = null, ty = null;
-  card.addEventListener('touchstart', function(e){
-    tx = e.touches[0].clientX; ty = e.touches[0].clientY;
-  }, {passive:true});
-  card.addEventListener('touchend', function(e){
-    if(tx === null) return;
-    var dx = e.changedTouches[0].clientX - tx;
-    var dy = e.changedTouches[0].clientY - ty;
-    tx = ty = null;
-    if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5){
-      if(dx < 0) go(idx + 1); else go(idx - 1);
+  // ── quizlet-style swipe: right = выучил, left = повторить ──
+  var reduceMotion = false;
+  try{ reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+  var drag = null;        // {x0, y0, dx, active}
+  var suppressClick = false;
+  var badgeK = $('badgeK'), badgeR = $('badgeR');
+
+  function dragTransform(dx){
+    var flipPart = card.classList.contains('flipped') ? ' rotateY(180deg)' : '';
+    return 'translateX(' + dx + 'px) rotate(' + (dx * 0.04) + 'deg)' + flipPart;
+  }
+  function setBadges(dx){
+    badgeK.style.opacity = dx > 0 ? Math.min(1, dx / 90) : 0;
+    badgeR.style.opacity = dx < 0 ? Math.min(1, -dx / 90) : 0;
+  }
+  function swipeCommit(dir){ // 1 = right/выучил, -1 = left/повторить
+    var v = dir > 0 ? 'k' : 'r';
+    marks[idx] = v;
+    saveMarks();
+    updateMarkUI();
+    var finish = function(){
+      card.classList.remove('flying');
+      card.style.transform = '';
+      card.style.opacity = '';
+      setBadges(0);
+      settleAfterMark(true);
+    };
+    if(reduceMotion){ finish(); return; }
+    card.classList.add('flying');
+    var w = card.parentElement.offsetWidth || 400;
+    card.style.transform = dragTransform(dir * w * 1.2);
+    card.style.opacity = '0';
+    setTimeout(finish, 240);
+  }
+  card.addEventListener('pointerdown', function(e){
+    if(!deck.length) return;
+    if(e.target.closest('a, .ask, input, button')) return;
+    if(card.classList.contains('flying')) return;
+    drag = {x0: e.clientX, y0: e.clientY, dx: 0, active: false, id: e.pointerId};
+  });
+  card.addEventListener('pointermove', function(e){
+    if(!drag || e.pointerId !== drag.id) return;
+    var dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+    if(!drag.active){
+      if(Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.3){
+        drag.active = true;
+        card.classList.add('dragging');
+        try{ card.setPointerCapture(e.pointerId); }catch(err){}
+      } else if(Math.abs(dy) > 14){
+        drag = null; // vertical scroll wins
+        return;
+      } else return;
     }
-  }, {passive:true});
+    drag.dx = dx;
+    card.style.transform = dragTransform(dx);
+    setBadges(dx);
+  });
+  function dragEnd(e){
+    if(!drag || (e && e.pointerId !== drag.id)) return;
+    var wasActive = drag.active, dx = drag.dx;
+    drag = null;
+    card.classList.remove('dragging');
+    if(!wasActive) return;
+    suppressClick = true;
+    setTimeout(function(){ suppressClick = false; }, 80);
+    var threshold = Math.min(130, (card.parentElement.offsetWidth || 400) * 0.35);
+    if(Math.abs(dx) > threshold){
+      swipeCommit(dx > 0 ? 1 : -1);
+    } else {
+      card.style.transform = '';
+      setBadges(0);
+    }
+  }
+  card.addEventListener('pointerup', dragEnd);
+  card.addEventListener('pointercancel', function(e){
+    if(drag && drag.active){
+      card.classList.remove('dragging');
+      card.style.transform = '';
+      setBadges(0);
+    }
+    drag = null;
+  });
 
   // ── table of contents ──
   var toc = $('toc'), tocBody = $('tocBody'), tocScroll = $('tocScroll'),
@@ -1117,7 +1396,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   tocBody.addEventListener('click', function(e){
     var b = e.target.closest('.toc-item');
     if(!b) return;
-    go(parseInt(b.dataset.i, 10));
+    goAbs(parseInt(b.dataset.i, 10));
     closeToc();
   });
   tocRail.addEventListener('click', function(e){
@@ -1322,8 +1601,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     }
     marks = st.marks;
     saveMarks();
-    idx = st.pos;
-    render();
+    goAbs(st.pos);
     var c = markCounts();
     sheetNote.textContent = 'Готово: карточка ' + (idx + 1) + ', выучено ' + c.k + ', на повторение ' + c.r + '.';
     sheetNote.className = 'sheet-note good';
@@ -1331,17 +1609,30 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   });
 
   // ── load data ──
+  $('modeTest').disabled = true;
+  var quizPromise = fetch('quiz.json')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .catch(function(){ return null; });
+
   function start(data){
     cards = data;
     N = cards.length;
-    slider.max = N;
-    idx = Math.min(loadPos(), N - 1);
+    rebuildDeck();
+    var savedAbs = Math.min(loadPos('learn'), N - 1);
+    pos = Math.max(0, deck.indexOf(savedAbs));
     $('loader').hidden = true;
     $('stage').hidden = false;
     $('nav').hidden = false;
     $('markbar').hidden = false;
+    $('modebar').hidden = false;
     $('progressRow').hidden = false;
     render();
+    quizPromise.then(function(q){
+      if(q && q.length === N){
+        quiz = q;
+        $('modeTest').disabled = false;
+      }
+    });
   }
 
   fetch('cards.json')
