@@ -477,6 +477,94 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   border:2px solid var(--repeat);
   transform:rotate(-8deg);
 }
+/* ── test panels (setup / result) ── */
+.panel{
+  position:absolute;
+  inset:4px 0 10px;
+  background:var(--card-paper);
+  color:#222;
+  border-radius:14px;
+  box-shadow:var(--card-shadow);
+  padding:30px 26px;
+  box-sizing:border-box;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  font-family:Georgia,serif;
+  animation:rise .35s ease-out;
+}
+@keyframes rise{
+  from{opacity:0;transform:translateY(16px);}
+  to{opacity:1;transform:none;}
+}
+@media (prefers-reduced-motion: reduce){
+  .panel{animation:none;}
+}
+.panel-title{
+  font-size:24px;
+  line-height:1.25;
+  text-wrap:balance;
+}
+.panel-text{
+  margin:0;
+  font-size:14.5px;
+  line-height:1.5;
+  color:#666;
+}
+.chip-label{
+  font-family:Verdana,sans-serif;
+  font-size:11px;
+  font-weight:bold;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#9b351e;
+  margin-top:4px;
+}
+.chips{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.chips button{
+  border:1px solid #ddd6c6;
+  background:#fffdf8;
+  color:#444;
+  border-radius:10px;
+  padding:9px 16px;
+  font-size:15px;
+  font-family:Verdana,sans-serif;
+  cursor:pointer;
+  font-variant-numeric:tabular-nums;
+}
+.chips button.on{
+  background:#9b351e;
+  border-color:#9b351e;
+  color:#fdf9f4;
+}
+.chips button:disabled{opacity:.4;cursor:default;}
+.panel > .navbtn, .panel > .navbtn.primary{flex:none;}
+.panel-start{margin-top:8px;}
+.panel-row{
+  display:flex;
+  gap:10px;
+  margin-top:8px;
+}
+.panel-row .navbtn{flex:1;}
+.score{
+  font-size:52px;
+  line-height:1.1;
+  font-variant-numeric:tabular-nums;
+}
+.score-total{
+  font-size:24px;
+  color:#888;
+}
+.verdict{
+  font-size:19px;
+  color:#9b351e;
+}
+
 .deck-empty{
   position:absolute;
   inset:16px 0;
@@ -811,10 +899,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     <div class="seg" role="group" aria-label="Режим">
       <button id="modeLearn" class="on">Учить</button><button id="modeTest">Тест</button>
     </div>
-    <div class="seg" id="shuffleWrap" hidden>
-      <button id="shuffleBtn" title="Перемешать заново">🔀 Перемешать</button>
-    </div>
-    <div class="seg" role="group" aria-label="Стопка">
+    <div class="seg" id="pileSeg" role="group" aria-label="Стопка">
       <button id="pileAll" class="on">Все</button><button id="pileR" class="pr">↻ <span id="pileRn">0</span></button><button id="pileK" class="pk">✓ <span id="pileKn">0</span></button>
     </div>
   </div>
@@ -823,6 +908,33 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     <div class="swipe-badge sb-r" id="badgeR">↻ Повторить</div>
     <div class="swipe-badge sb-k" id="badgeK">✓ Выучил</div>
     <div class="deck-empty" id="deckEmpty" hidden></div>
+
+    <div class="panel" id="testSetup" hidden>
+      <div class="quiz-label">Режим теста</div>
+      <div class="panel-title">Угадайте реалию по факту</div>
+      <p class="panel-text">Название скрыто за «•••». Прочитайте факт, переверните карточку и отметьте, угадали ли вы. Ошибки автоматически лягут в стопку «Повторить».</p>
+      <div class="chip-label">Сколько карточек</div>
+      <div class="chips" id="countChips">
+        <button data-c="10" class="on">10</button><button data-c="25">25</button><button data-c="50">50</button><button data-c="100">100</button>
+      </div>
+      <div class="chip-label">Откуда брать</div>
+      <div class="chips" id="srcChips">
+        <button data-s="all" class="on">Все</button><button data-s="r">↻ Повторить</button><button data-s="k">✓ Выученные</button>
+      </div>
+      <button class="navbtn primary panel-start" id="startTest">Начать тест</button>
+    </div>
+
+    <div class="panel" id="testResult" hidden>
+      <div class="quiz-label">Результат</div>
+      <div class="score"><span id="scoreNum">0</span><span class="score-total" id="scoreTotal"> из 0</span></div>
+      <div class="verdict" id="verdict"></div>
+      <p class="panel-text" id="resultNote"></p>
+      <div class="panel-row">
+        <button class="navbtn" id="finishTest">Закончить</button>
+        <button class="navbtn primary" id="againTest">Ещё раз</button>
+      </div>
+    </div>
+
     <div class="card" id="card" tabindex="0" role="button" aria-label="Карточка — нажмите, чтобы перевернуть">
       <div class="face front">
         <div class="face-scroll" id="frontContent"></div>
@@ -841,14 +953,19 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
             <div class="ask-note" id="askNote"></div>
           </div>
         </div>
-        <div class="flip-hint">нажмите, чтобы вернуться</div>
+        <div class="flip-hint" id="hintBack">нажмите, чтобы вернуться</div>
       </div>
     </div>
   </div>
 
   <div class="markbar" id="markbar" hidden>
-    <button class="mark know" id="knowBtn"><span class="mk">✓</span> Выучил</button>
-    <button class="mark repeat" id="repeatBtn"><span class="mk">↻</span> Повторить</button>
+    <button class="mark repeat" id="repeatBtn"><span class="mk">↩</span> Повторить</button>
+    <button class="mark know" id="knowBtn">Выучил <span class="mk">↪</span></button>
+  </div>
+
+  <div class="markbar" id="gradebar" hidden>
+    <button class="mark repeat" id="wrongBtn"><span class="mk">↩</span> ✗ Не угадал</button>
+    <button class="mark know" id="rightBtn">✓ Угадал <span class="mk">↪</span></button>
   </div>
 
   <div class="nav" id="nav" hidden>
@@ -951,10 +1068,9 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     setTimeout(function(){ settleAfterMark(!clearing); }, 260);
   }
 
-  function posKey(m){ return m === 'test' ? 'chgk-realia-pos-test' : 'chgk-realia-pos'; }
-  function loadPos(m){
+  function loadPos(){
     try{
-      var v = localStorage.getItem(posKey(m));
+      var v = localStorage.getItem('chgk-realia-pos');
       if(v !== null){
         var n = parseInt(v, 10);
         if(!isNaN(n) && n >= 0) return n;
@@ -963,39 +1079,14 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     return 0;
   }
   function savePos(){
-    if(pile !== 'all') return; // piles are review sessions, remember main position only
-    try{ localStorage.setItem(posKey(mode), String(idx)); }catch(e){}
-  }
-  // seeded shuffle so the random test order survives reloads
-  var testSeed = 0;
-  try{
-    testSeed = parseInt(localStorage.getItem('chgk-realia-shuf') || '0', 10) || 0;
-  }catch(e){}
-  if(!testSeed){
-    testSeed = (Math.random() * 0x7fffffff) | 0 || 1;
-    try{ localStorage.setItem('chgk-realia-shuf', String(testSeed)); }catch(e){}
-  }
-  function mulberry32(a){
-    return function(){
-      a |= 0; a = (a + 0x6D2B79F5) | 0;
-      var t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+    if(mode !== 'learn' || pile !== 'all') return;
+    try{ localStorage.setItem('chgk-realia-pos', String(idx)); }catch(e){}
   }
   function rebuildDeck(){
     deck = [];
     for(var i = 0; i < N; i++){
       if(pile !== 'all' && marks[i] !== pile) continue;
-      if(mode === 'test' && (!quiz || !quiz[i])) continue;
       deck.push(i);
-    }
-    if(mode === 'test'){
-      var rng = mulberry32(testSeed);
-      for(var j = deck.length - 1; j > 0; j--){
-        var k = Math.floor(rng() * (j + 1));
-        var tmp = deck[j]; deck[j] = deck[k]; deck[k] = tmp;
-      }
     }
   }
 
@@ -1006,6 +1097,15 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   }
 
   function render(){
+    if(mode === 'test'){ renderTest(); return; }
+    $('testSetup').hidden = true;
+    $('testResult').hidden = true;
+    $('gradebar').hidden = true;
+    $('markbar').hidden = false;
+    $('nav').hidden = false;
+    $('progressRow').hidden = false;
+    badgeK.textContent = '✓ Выучил';
+    badgeR.textContent = '↻ Повторить';
     var D = deck.length;
     var empty = (D === 0);
     card.hidden = empty;
@@ -1033,21 +1133,9 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     idx = deck[pos];
     var c = cards[idx];
     var flen = c[0], back = c[1];
-    if(mode === 'test'){
-      frontEl.innerHTML = '';
-      var lab = document.createElement('div');
-      lab.className = 'quiz-label';
-      lab.textContent = 'Что это за реалия?';
-      var q = document.createElement('div');
-      q.className = 'quiz-q';
-      q.textContent = quiz[idx];
-      frontEl.appendChild(lab);
-      frontEl.appendChild(q);
-      $('hintFront').textContent = 'нажмите, чтобы узнать ответ';
-    } else {
-      frontEl.innerHTML = back.slice(0, flen);
-      $('hintFront').textContent = 'нажмите, чтобы увидеть факты';
-    }
+    frontEl.innerHTML = back.slice(0, flen);
+    $('hintFront').textContent = 'нажмите, чтобы увидеть факты';
+    $('hintBack').textContent = 'нажмите, чтобы вернуться';
     backEl.innerHTML = back;
     frontEl.scrollTop = 0;
     backEl.parentElement.scrollTop = 0;
@@ -1071,7 +1159,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   // jump to an absolute card index, relaxing filters if needed
   function goAbs(a){
     if(!cards) return;
-    if(mode === 'test' && (!quiz || !quiz[a])) setMode('learn', true);
+    if(mode === 'test') setMode('learn', true);
     var ip;
     rebuildDeck();
     ip = deck.indexOf(a);
@@ -1081,6 +1169,10 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   }
   function flip(){
     card.classList.toggle('flipped');
+    if(mode === 'test' && test && test.phase === 'q' && card.classList.contains('flipped')){
+      $('wrongBtn').disabled = false;
+      $('rightBtn').disabled = false;
+    }
   }
 
   // ── interactions ──
@@ -1106,19 +1198,28 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   });
 
   // ── mode & pile switching ──
+  var learnIdx = -1; // where the learn deck was before entering the test
   function setMode(m, silent){
     if(mode === m) return;
+    if(mode === 'learn' && m === 'test') learnIdx = idx;
     mode = m;
     $('modeLearn').classList.toggle('on', m === 'learn');
     $('modeTest').classList.toggle('on', m === 'test');
-    $('shuffleWrap').hidden = (m !== 'test');
+    $('pileSeg').hidden = (m === 'test');
+    if(m === 'test'){
+      test = {phase: 'setup', count: test ? test.count : 10, src: 'all', ids: [], i: 0, right: 0, wrong: 0};
+    }
     if(silent) return; // caller will rebuild and render
-    var cur = idx;
-    rebuildDeck();
-    var ip = deck.indexOf(cur);
-    if(ip < 0) ip = deck.indexOf(loadPos(m));
-    pos = Math.max(0, ip);
-    render();
+    if(m === 'test'){
+      renderTest();
+    } else {
+      var cur = learnIdx >= 0 ? learnIdx : idx;
+      rebuildDeck();
+      var ip = deck.indexOf(cur);
+      if(ip < 0) ip = deck.indexOf(loadPos());
+      pos = Math.max(0, ip);
+      render();
+    }
   }
   function setPile(p, silent){
     if(pile === p) return;
@@ -1135,16 +1236,147 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   }
   $('modeLearn').addEventListener('click', function(){ setMode('learn'); });
   $('modeTest').addEventListener('click', function(){ setMode('test'); });
-  $('shuffleBtn').addEventListener('click', function(){
-    testSeed = (Math.random() * 0x7fffffff) | 0 || 1;
-    try{ localStorage.setItem('chgk-realia-shuf', String(testSeed)); }catch(e){}
-    rebuildDeck();
-    pos = 0;
-    render();
-  });
   $('pileAll').addEventListener('click', function(){ setPile('all'); });
   $('pileR').addEventListener('click', function(){ setPile('r'); });
   $('pileK').addEventListener('click', function(){ setPile('k'); });
+
+  // ── test engine ──
+  var test = null; // {phase: 'setup'|'q'|'result', count, src, ids, i, right, wrong}
+
+  function testPool(src){
+    var a = [];
+    if(!quiz) return a;
+    for(var i = 0; i < N; i++){
+      if(!quiz[i]) continue;
+      if(src !== 'all' && marks[i] !== src) continue;
+      a.push(i);
+    }
+    return a;
+  }
+  function refreshSetup(){
+    var cnt = $('countChips').querySelectorAll('button');
+    for(var i = 0; i < cnt.length; i++)
+      cnt[i].classList.toggle('on', cnt[i].dataset.c === String(test.count));
+    var labels = {all: 'Все', r: '↻ Повторить', k: '✓ Выученные'};
+    var src = $('srcChips').querySelectorAll('button');
+    for(var j = 0; j < src.length; j++){
+      var s = src[j].dataset.s;
+      var n = testPool(s).length;
+      src[j].textContent = labels[s] + ' · ' + n;
+      src[j].disabled = (n === 0);
+      src[j].classList.toggle('on', s === test.src);
+    }
+  }
+  function renderTest(){
+    var setup = (test.phase === 'setup'), q = (test.phase === 'q'), res = (test.phase === 'result');
+    $('testSetup').hidden = !setup;
+    $('testResult').hidden = !res;
+    card.hidden = !q;
+    $('deckEmpty').hidden = true;
+    $('nav').hidden = true;
+    $('markbar').hidden = true;
+    $('gradebar').hidden = !q;
+    $('progressRow').hidden = true;
+    setBadges(0);
+    if(setup){
+      counter.innerHTML = '';
+      pct.textContent = '';
+      refreshSetup();
+      return;
+    }
+    if(q){
+      badgeK.textContent = '✓ Угадал';
+      badgeR.textContent = '✗ Не угадал';
+      idx = test.ids[test.i];
+      var back = cards[idx][1];
+      frontEl.innerHTML = '';
+      var lab = document.createElement('div');
+      lab.className = 'quiz-label';
+      lab.textContent = 'Что это за реалия?';
+      var qd = document.createElement('div');
+      qd.className = 'quiz-q';
+      qd.textContent = quiz[idx];
+      frontEl.appendChild(lab);
+      frontEl.appendChild(qd);
+      backEl.innerHTML = back;
+      $('hintFront').textContent = 'нажмите, чтобы узнать ответ';
+      $('hintBack').textContent = 'угадали? отметьте ниже или свайпните';
+      frontEl.scrollTop = 0;
+      backEl.parentElement.scrollTop = 0;
+      card.classList.remove('flipped');
+      $('wrongBtn').disabled = true;
+      $('rightBtn').disabled = true;
+      counter.innerHTML = '<b>' + (test.i + 1) + '</b> / ' + test.ids.length;
+      resetAsk();
+      return;
+    }
+    // result
+    var total = test.ids.length;
+    var pctv = total ? Math.round(test.right / total * 100) : 0;
+    $('scoreTotal').textContent = ' из ' + total;
+    $('verdict').textContent =
+      pctv >= 90 ? 'Блестяще!' :
+      pctv >= 70 ? 'Отлично!' :
+      pctv >= 50 ? 'Неплохо — уже что-то помните.' :
+      'Есть над чем поработать — всё нужное уже в «Повторить».';
+    $('resultNote').textContent = test.wrong
+      ? 'Ошибок: ' + test.wrong + ' — они добавлены в стопку «Повторить».'
+      : 'Без единой ошибки!';
+    counter.innerHTML = '';
+    // count-up animation for the score
+    var el = $('scoreNum'), target = test.right, t0 = null;
+    if(reduceMotion){ el.textContent = target; return; }
+    el.textContent = '0';
+    var step = function(ts){
+      if(t0 === null) t0 = ts;
+      var k = Math.min(1, (ts - t0) / 600);
+      el.textContent = Math.round(target * k);
+      if(k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  function startTest(){
+    var pool = testPool(test.src);
+    if(!pool.length){ test.src = 'all'; pool = testPool('all'); }
+    for(var j = pool.length - 1; j > 0; j--){
+      var k = Math.floor(Math.random() * (j + 1));
+      var t = pool[j]; pool[j] = pool[k]; pool[k] = t;
+    }
+    test.ids = pool.slice(0, Math.min(test.count, pool.length));
+    test.i = 0; test.right = 0; test.wrong = 0;
+    test.phase = 'q';
+    renderTest();
+  }
+  function grade(correct){
+    if(!test || test.phase !== 'q') return;
+    if(correct) test.right++;
+    else {
+      test.wrong++;
+      marks[idx] = 'r'; // wrong answers go to the repeat pile
+      saveMarks();
+      updateMarkUI();
+    }
+    test.i++;
+    if(test.i >= test.ids.length) test.phase = 'result';
+    renderTest();
+  }
+  $('countChips').addEventListener('click', function(e){
+    var b = e.target.closest('button');
+    if(!b) return;
+    test.count = parseInt(b.dataset.c, 10);
+    refreshSetup();
+  });
+  $('srcChips').addEventListener('click', function(e){
+    var b = e.target.closest('button');
+    if(!b || b.disabled) return;
+    test.src = b.dataset.s;
+    refreshSetup();
+  });
+  $('startTest').addEventListener('click', startTest);
+  $('againTest').addEventListener('click', function(){ test.phase = 'setup'; renderTest(); });
+  $('finishTest').addEventListener('click', function(){ setMode('learn'); });
+  $('wrongBtn').addEventListener('click', function(){ grade(false); });
+  $('rightBtn').addEventListener('click', function(){ grade(true); });
 
   document.addEventListener('keydown', function(e){
     if(!cards) return;
@@ -1158,6 +1390,15 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     }
     var t = e.target;
     if(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if(mode === 'test'){
+      if(!test || test.phase !== 'q') return;
+      if(e.key === ' '){ e.preventDefault(); flip(); }
+      else if(card.classList.contains('flipped')){
+        if(e.key === 'ArrowRight'){ e.preventDefault(); grade(true); }
+        else if(e.key === 'ArrowLeft'){ e.preventDefault(); grade(false); }
+      }
+      return;
+    }
     if(e.key === 'ArrowRight'){ e.preventDefault(); go(pos + 1); }
     else if(e.key === 'ArrowLeft'){ e.preventDefault(); go(pos - 1); }
     else if(e.key === ' '){ e.preventDefault(); flip(); }
@@ -1178,17 +1419,22 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     badgeK.style.opacity = dx > 0 ? Math.min(1, dx / 90) : 0;
     badgeR.style.opacity = dx < 0 ? Math.min(1, -dx / 90) : 0;
   }
-  function swipeCommit(dir){ // 1 = right/выучил, -1 = left/повторить
-    var v = dir > 0 ? 'k' : 'r';
-    marks[idx] = v;
-    saveMarks();
-    updateMarkUI();
+  function swipeCommit(dir){ // 1 = right (выучил/угадал), -1 = left (повторить/не угадал)
+    var after;
+    if(mode === 'test'){
+      after = function(){ grade(dir > 0); };
+    } else {
+      marks[idx] = dir > 0 ? 'k' : 'r';
+      saveMarks();
+      updateMarkUI();
+      after = function(){ settleAfterMark(true); };
+    }
     var finish = function(){
       card.classList.remove('flying');
       card.style.transform = '';
       card.style.opacity = '';
       setBadges(0);
-      settleAfterMark(true);
+      after();
     };
     if(reduceMotion){ finish(); return; }
     card.classList.add('flying');
@@ -1198,7 +1444,8 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     setTimeout(finish, 240);
   }
   card.addEventListener('pointerdown', function(e){
-    if(!deck.length) return;
+    if(mode === 'learn' && !deck.length) return;
+    if(mode === 'test' && (!test || test.phase !== 'q' || !card.classList.contains('flipped'))) return;
     if(e.target.closest('a, .ask, input, button')) return;
     if(card.classList.contains('flying')) return;
     drag = {x0: e.clientX, y0: e.clientY, dx: 0, active: false, id: e.pointerId,
@@ -1662,7 +1909,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     cards = data;
     N = cards.length;
     rebuildDeck();
-    var savedAbs = Math.min(loadPos('learn'), N - 1);
+    var savedAbs = Math.min(loadPos(), N - 1);
     pos = Math.max(0, deck.indexOf(savedAbs));
     $('loader').hidden = true;
     $('stage').hidden = false;
