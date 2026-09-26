@@ -797,6 +797,37 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
 }
 .sheet-note.good{color:var(--know);}
 .sheet-note.bad{color:var(--accent);}
+.sheet-danger{
+  border-top:1px dashed var(--line);
+  padding-top:12px;
+  margin-top:4px;
+}
+.sheet-reset{
+  border:0;
+  background:none;
+  color:var(--muted);
+  font-size:13px;
+  text-decoration:underline;
+  text-decoration-style:dotted;
+  cursor:pointer;
+  padding:0;
+}
+.sheet-reset:hover{color:var(--accent);}
+.sheet-confirm{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:13px;
+  color:var(--ink);
+}
+.sheet-confirm[hidden]{display:none;}
+.sheet-confirm .navbtn{flex:none;padding:8px 14px;font-size:13px;}
+.navbtn.danger{
+  border-color:var(--accent);
+  color:var(--accent);
+}
+.navbtn.danger:hover{background:var(--accent);color:#fdf9f4;}
 
 /* ── nav ── */
 .nav{
@@ -869,10 +900,10 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   <div class="sheet-back" id="sheetBack" hidden>
     <div class="sheet" role="dialog" aria-label="Перенос прогресса">
       <div class="sheet-head">
-        <h2>Перенос прогресса</h2>
+        <h2>Прогресс</h2>
         <button class="icon" id="sheetClose" aria-label="Закрыть">✕</button>
       </div>
-      <p class="sheet-text">Прогресс хранится в этом браузере. На iPhone при открытии с ярлыка на главном экране система может стирать его при закрытии. Скопируйте код — и восстановите прогресс здесь же или на другом устройстве.</p>
+      <p class="sheet-text">Прогресс хранится в этом браузере. Чтобы перенести его на другое устройство или подстраховаться, скопируйте код — и вставьте его там.</p>
       <div class="sheet-stats" id="sheetStats"></div>
       <button class="navbtn primary sheet-copy" id="copyCode">Скопировать код прогресса</button>
       <div class="sheet-code" id="codeOut" hidden></div>
@@ -881,6 +912,14 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
         <button class="navbtn" id="restoreBtn">Восстановить</button>
       </div>
       <div class="sheet-note" id="sheetNote"></div>
+      <div class="sheet-danger">
+        <button class="sheet-reset" id="resetBtn">Сбросить весь прогресс…</button>
+        <div class="sheet-confirm" id="resetConfirm" hidden>
+          <span>Стереть позицию и все метки?</span>
+          <button class="navbtn danger" id="resetYes">Сбросить</button>
+          <button class="navbtn" id="resetNo">Отмена</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1455,7 +1494,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     if(!drag || e.pointerId !== drag.id) return;
     var dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
     if(!drag.active){
-      if(Math.abs(dx) > 7 && Math.abs(dx) > Math.abs(dy) * 1.15){
+      if(Math.abs(dx) > 5 && Math.abs(dx) > Math.abs(dy) * 1.1){
         drag.active = true;
         card.classList.add('dragging');
         try{ card.setPointerCapture(e.pointerId); }catch(err){}
@@ -1483,8 +1522,8 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     if(!wasActive) return;
     suppressClick = true;
     setTimeout(function(){ suppressClick = false; }, 80);
-    var threshold = Math.min(60, (card.parentElement.offsetWidth || 400) * 0.16);
-    var flick = Math.abs(dx) > 22 && Math.abs(vx) > 0.15 && (vx > 0) === (dx > 0);
+    var threshold = Math.min(44, (card.parentElement.offsetWidth || 400) * 0.12);
+    var flick = Math.abs(dx) > 14 && Math.abs(vx) > 0.08 && (vx > 0) === (dx > 0);
     if(Math.abs(dx) > threshold || flick){
       swipeCommit(dx > 0 ? 1 : -1);
     } else {
@@ -1852,11 +1891,15 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   function openSheet(){
     if(!cards) return;
     var c = markCounts();
-    $('sheetStats').textContent = 'Сейчас: карточка ' + (idx + 1) + ' из ' + N + ' · выучено ' + c.k + ' · на повторение ' + c.r;
+    var pk = Math.round(c.k / N * 100);
+    $('sheetStats').textContent = 'Сейчас: карточка ' + (idx + 1) + ' из ' + N +
+      ' · выучено ' + c.k + (c.k ? ' (' + pk + '%)' : '') + ' · на повторение ' + c.r;
     sheetNote.textContent = '';
     sheetNote.className = 'sheet-note';
     $('codeOut').hidden = true;
     $('codeIn').value = '';
+    $('resetConfirm').hidden = true;
+    $('resetBtn').hidden = false;
     sheetBack.hidden = false;
   }
   function closeSheet(){ sheetBack.hidden = true; }
@@ -1883,6 +1926,31 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
       }, fallback);
     } else fallback();
   });
+  $('resetBtn').addEventListener('click', function(){
+    $('resetBtn').hidden = true;
+    $('resetConfirm').hidden = false;
+  });
+  $('resetNo').addEventListener('click', function(){
+    $('resetConfirm').hidden = true;
+    $('resetBtn').hidden = false;
+  });
+  $('resetYes').addEventListener('click', function(){
+    marks = {};
+    saveMarks();
+    try{ localStorage.removeItem('chgk-realia-pos'); }catch(e){}
+    learnIdx = -1;
+    if(mode !== 'learn') setMode('learn', true);
+    if(pile !== 'all') setPile('all', true);
+    rebuildDeck();
+    pos = 0;
+    render();
+    $('resetConfirm').hidden = true;
+    $('resetBtn').hidden = false;
+    $('sheetStats').textContent = '';
+    sheetNote.textContent = 'Прогресс сброшен — начинаете с чистого листа.';
+    sheetNote.className = 'sheet-note good';
+  });
+
   $('restoreBtn').addEventListener('click', function(){
     var st = decodeState($('codeIn').value);
     if(!st){
