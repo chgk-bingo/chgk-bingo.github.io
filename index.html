@@ -811,6 +811,9 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     <div class="seg" role="group" aria-label="Режим">
       <button id="modeLearn" class="on">Учить</button><button id="modeTest">Тест</button>
     </div>
+    <div class="seg" id="shuffleWrap" hidden>
+      <button id="shuffleBtn" title="Перемешать заново">🔀 Перемешать</button>
+    </div>
     <div class="seg" role="group" aria-label="Стопка">
       <button id="pileAll" class="on">Все</button><button id="pileR" class="pr">↻ <span id="pileRn">0</span></button><button id="pileK" class="pk">✓ <span id="pileKn">0</span></button>
     </div>
@@ -963,12 +966,36 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     if(pile !== 'all') return; // piles are review sessions, remember main position only
     try{ localStorage.setItem(posKey(mode), String(idx)); }catch(e){}
   }
+  // seeded shuffle so the random test order survives reloads
+  var testSeed = 0;
+  try{
+    testSeed = parseInt(localStorage.getItem('chgk-realia-shuf') || '0', 10) || 0;
+  }catch(e){}
+  if(!testSeed){
+    testSeed = (Math.random() * 0x7fffffff) | 0 || 1;
+    try{ localStorage.setItem('chgk-realia-shuf', String(testSeed)); }catch(e){}
+  }
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
   function rebuildDeck(){
     deck = [];
     for(var i = 0; i < N; i++){
       if(pile !== 'all' && marks[i] !== pile) continue;
       if(mode === 'test' && (!quiz || !quiz[i])) continue;
       deck.push(i);
+    }
+    if(mode === 'test'){
+      var rng = mulberry32(testSeed);
+      for(var j = deck.length - 1; j > 0; j--){
+        var k = Math.floor(rng() * (j + 1));
+        var tmp = deck[j]; deck[j] = deck[k]; deck[k] = tmp;
+      }
     }
   }
 
@@ -1084,6 +1111,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     mode = m;
     $('modeLearn').classList.toggle('on', m === 'learn');
     $('modeTest').classList.toggle('on', m === 'test');
+    $('shuffleWrap').hidden = (m !== 'test');
     if(silent) return; // caller will rebuild and render
     var cur = idx;
     rebuildDeck();
@@ -1107,6 +1135,13 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   }
   $('modeLearn').addEventListener('click', function(){ setMode('learn'); });
   $('modeTest').addEventListener('click', function(){ setMode('test'); });
+  $('shuffleBtn').addEventListener('click', function(){
+    testSeed = (Math.random() * 0x7fffffff) | 0 || 1;
+    try{ localStorage.setItem('chgk-realia-shuf', String(testSeed)); }catch(e){}
+    rebuildDeck();
+    pos = 0;
+    render();
+  });
   $('pileAll').addEventListener('click', function(){ setPile('all'); });
   $('pileR').addEventListener('click', function(){ setPile('r'); });
   $('pileK').addEventListener('click', function(){ setPile('k'); });
@@ -1166,13 +1201,14 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     if(!deck.length) return;
     if(e.target.closest('a, .ask, input, button')) return;
     if(card.classList.contains('flying')) return;
-    drag = {x0: e.clientX, y0: e.clientY, dx: 0, active: false, id: e.pointerId};
+    drag = {x0: e.clientX, y0: e.clientY, dx: 0, active: false, id: e.pointerId,
+            vx: 0, lastX: e.clientX, lastT: e.timeStamp || Date.now()};
   });
   card.addEventListener('pointermove', function(e){
     if(!drag || e.pointerId !== drag.id) return;
     var dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
     if(!drag.active){
-      if(Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.3){
+      if(Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2){
         drag.active = true;
         card.classList.add('dragging');
         try{ card.setPointerCapture(e.pointerId); }catch(err){}
@@ -1181,20 +1217,28 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
         return;
       } else return;
     }
+    var t = e.timeStamp || Date.now();
+    var dt = t - drag.lastT;
+    if(dt > 0){
+      var inst = (e.clientX - drag.lastX) / dt; // px per ms
+      drag.vx = drag.vx * 0.6 + inst * 0.4;     // smoothed
+      drag.lastX = e.clientX; drag.lastT = t;
+    }
     drag.dx = dx;
     card.style.transform = dragTransform(dx);
     setBadges(dx);
   });
   function dragEnd(e){
     if(!drag || (e && e.pointerId !== drag.id)) return;
-    var wasActive = drag.active, dx = drag.dx;
+    var wasActive = drag.active, dx = drag.dx, vx = drag.vx;
     drag = null;
     card.classList.remove('dragging');
     if(!wasActive) return;
     suppressClick = true;
     setTimeout(function(){ suppressClick = false; }, 80);
-    var threshold = Math.min(130, (card.parentElement.offsetWidth || 400) * 0.35);
-    if(Math.abs(dx) > threshold){
+    var threshold = Math.min(95, (card.parentElement.offsetWidth || 400) * 0.28);
+    var flick = Math.abs(dx) > 40 && Math.abs(vx) > 0.35 && (vx > 0) === (dx > 0);
+    if(Math.abs(dx) > threshold || flick){
       swipeCommit(dx > 0 ? 1 : -1);
     } else {
       card.style.transform = '';
