@@ -873,7 +873,7 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
   <header>
     <h1>ЧГК <span class="dot">·</span> Реалии</h1>
     <span class="counter" id="counter"></span>
-    <button class="icon" id="syncBtn" title="Перенос прогресса" aria-label="Перенос прогресса">⇅</button>
+    <button class="icon" id="syncBtn" title="Прогресс" aria-label="Прогресс">◔</button>
     <button class="icon" id="tocBtn" title="Содержание" aria-label="Содержание">≡</button>
   </header>
 
@@ -1860,6 +1860,12 @@ button.icon:focus-visible, .navbtn:focus-visible, .slider:focus-visible, .card:f
     sheetNote.textContent = 'Прогресс сброшен — начинаете с чистого листа.';
     sheetNote.className = 'sheet-note good';
   });
+
+  // tap the title to reload the page (pulls the latest version; progress is kept)
+  var h1 = document.querySelector('h1');
+  h1.style.cursor = 'pointer';
+  h1.title = 'Обновить страницу';
+  h1.addEventListener('click', function(){ location.reload(); });
 
   // ── load data ──
   $('modeTest').disabled = true;
